@@ -1,0 +1,128 @@
+name: Publish
+
+on:
+  schedule:
+    - cron: '0 9 * * *'
+  workflow_dispatch:
+    inputs:
+      upstream_tag:
+        description: 'Upstream tag to publish (e.g. v3.12.3). Leave empty to auto-detect latest.'
+        required: false
+      copilot_revision:
+        description: 'Copilot patch revision number (default: 1)'
+        required: false
+        default: '1'
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Determine upstream tag
+        id: upstream
+        env:
+          INPUT_TAG: ${{ github.event.inputs.upstream_tag }}
+        run: |
+          if [ -n "$INPUT_TAG" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG=$(git ls-remote --tags --refs --sort=-v:refname https://github.com/code-yeongyu/oh-my-openagent.git 'refs/tags/v*' | head -1 | sed 's|.*refs/tags/||')
+          fi
+
+          if [ -z "$TAG" ]; then
+            echo "ERROR: Could not determine upstream tag" >&2
+            exit 1
+          fi
+
+          if ! echo "$TAG" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: Tag '$TAG' does not match expected format (vX.Y.Z)" >&2
+            exit 1
+          fi
+
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Upstream tag: $TAG (version: $VERSION)"
+
+      - name: Check if already published
+        id: check
+        env:
+          INPUT_REVISION: ${{ github.event.inputs.copilot_revision }}
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          COPILOT_REV="${INPUT_REVISION:-1}"
+          COPILOT_VERSION="${UPSTREAM_VERSION}-copilot.${COPILOT_REV}"
+
+          if [ -f .upstream-version ] && [ "$(cat .upstream-version)" = "$UPSTREAM_VERSION" ]; then
+            if [ "$EVENT_NAME" = "schedule" ]; then
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+              echo "Already tracking $UPSTREAM_VERSION, skipping."
+              exit 0
+            fi
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+          echo "copilot_version=$COPILOT_VERSION" >> "$GITHUB_OUTPUT"
+          echo "copilot_rev=$COPILOT_REV" >> "$GITHUB_OUTPUT"
+          echo "Will publish: $COPILOT_VERSION"
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.check.outputs.skip != 'true'
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip != 'true'
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Fetch upstream
+        if: steps.check.outputs.skip != 'true'
+        env:
+          UPSTREAM_TAG: ${{ steps.upstream.outputs.tag }}
+        run: bash scripts/fetch-upstream.sh "$UPSTREAM_TAG"
+
+      - name: Apply patches
+        if: steps.check.outputs.skip != 'true'
+        run: bash scripts/apply-patches.sh
+
+      - name: Build and prepare
+        if: steps.check.outputs.skip != 'true'
+        run: bash scripts/build-and-prepare.sh
+        env:
+          VERSION: ${{ steps.check.outputs.copilot_version }}
+
+      - name: Publish to npm
+        if: steps.check.outputs.skip != 'true'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          COPILOT_VERSION: ${{ steps.check.outputs.copilot_version }}
+        run: |
+          if npm view "@turtton/oh-my-openagent@${COPILOT_VERSION}" version 2>/dev/null; then
+            echo "Version $COPILOT_VERSION already exists on npm, skipping publish."
+          else
+            npm publish --access public --provenance
+          fi
+
+      - name: Update tracked version and tag
+        if: steps.check.outputs.skip != 'true'
+        env:
+          UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
+          COPILOT_VERSION: ${{ steps.check.outputs.copilot_version }}
+        run: |
+          echo "$UPSTREAM_VERSION" > .upstream-version
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .upstream-version
+          git diff --cached --quiet && echo "No changes to commit" || git commit -m "chore: track upstream v${UPSTREAM_VERSION}"
+          git tag "v${COPILOT_VERSION}" 2>/dev/null || echo "Tag v${COPILOT_VERSION} already exists, skipping."
+          git push origin HEAD:main --tags 2>/dev/null || echo "Push failed (tag may already exist remotely), continuing."

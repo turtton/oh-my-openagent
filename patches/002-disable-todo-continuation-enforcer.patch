@@ -1,0 +1,11 @@
+--- a/src/index.ts	2026-03-19 00:57:41.730795110 +0900
++++ b/src/index.ts	2026-03-19 01:02:24.637099695 +0900
+@@ -29,7 +29,7 @@
+   await activePluginDispose?.()
+ 
+   const pluginConfig = loadPluginConfig(ctx.directory, ctx)
+-  const disabledHooks = new Set(pluginConfig.disabled_hooks ?? [])
++  const disabledHooks = new Set(pluginConfig.disabled_hooks ?? ["todo-continuation-enforcer"])
+ 
+   const isHookEnabled = (hookName: HookName): boolean => !disabledHooks.has(hookName)
+   const safeHookEnabled = pluginConfig.experimental?.safe_hook_creation ?? true

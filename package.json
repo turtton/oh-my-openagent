@@ -1,0 +1,10 @@
+{
+  "private": true,
+  "name": "@turtton/oh-my-openagent",
+  "description": "Patch-based distribution of oh-my-openagent for GitHub Copilot",
+  "scripts": {
+    "fetch": "bash scripts/fetch-upstream.sh",
+    "patch": "bash scripts/apply-patches.sh",
+    "build": "bash scripts/build-and-prepare.sh"
+  }
+}
