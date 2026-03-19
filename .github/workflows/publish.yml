@@ -104,7 +104,6 @@ jobs:
       - name: Publish to npm
         if: steps.check.outputs.skip != 'true'
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           COPILOT_VERSION: ${{ steps.check.outputs.copilot_version }}
         run: |
           if npm view "@turtton/oh-my-openagent@${COPILOT_VERSION}" version 2>/dev/null; then
