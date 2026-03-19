@@ -10,9 +10,17 @@ This is a patch-based distribution of oh-my-openagent. Instead of maintaining a 
 
 ## Installation
 
-```bash
-npm install -g @turtton/oh-my-openagent
+Add the package to the `plugin` array in your OpenCode config file (`~/.config/opencode/opencode.json` for global, or `opencode.json` in your project root):
+
+```json
+{
+  "plugin": [
+    "@turtton/oh-my-openagent"
+  ]
+}
 ```
+
+OpenCode will automatically install and load the plugin on next startup.
 
 ## Patches Applied
 

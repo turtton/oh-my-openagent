@@ -6,9 +6,17 @@
 oh-my-openagentのパッチベース配布です。完全なフォークを維持する代わりに、upstreamのソースコードに対象を絞ったパッチを適用し、`@turtton/oh-my-openagent`としてnpmに公開しています。すべてのパッチはGitHub Copilotの利用モデルで発生する不要なPremium Request消費の削減に焦点を当てています。upstreamの新しいリリースは自動的に追跡され、パッチを適用した状態でCIから公開されます。
 
 ## インストール
-```bash
-npm install -g @turtton/oh-my-openagent
+OpenCodeの設定ファイル（グローバルは `~/.config/opencode/opencode.json`、プロジェクト限定は `opencode.json`）の `"plugin"` 配列にパッケージ名を追加します:
+
+```json
+{
+  "plugin": [
+    "@turtton/oh-my-openagent"
+  ]
+}
 ```
+
+次回OpenCode起動時に自動的にインストール・ロードされます。
 
 ## 適用パッチ
 各パッチの説明:
