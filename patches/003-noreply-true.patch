@@ -1,0 +1,20 @@
+--- a/src/features/background-agent/manager.ts
++++ b/src/features/background-agent/manager.ts
+@@ -1649,7 +1649,7 @@
+           await this.client.session.promptAsync({
+             path: { id: task.parentSessionID },
+             body: {
+-              noReply: !allComplete,
++              noReply: true,
+               ...(agent !== undefined ? { agent } : {}),
+               ...(model !== undefined ? { model } : {}),
+               ...(resolvedTools ? { tools: resolvedTools } : {}),
+@@ -1659,7 +1659,7 @@
+           log("[background-agent] Sent notification to parent session:", {
+             taskId: task.id,
+             allComplete,
+-            noReply: !allComplete,
++            noReply: true,
+           })
+         } catch (error) {
+           if (isAbortedSessionError(error)) {
