@@ -1,5 +1,7 @@
 # @turtton/oh-my-openagent
 
+[日本語](./README.ja.md)
+
 A soft fork of [oh-my-openagent](https://github.com/code-yeongyu/oh-my-openagent) with patches to make premium request consumption more predictable for GitHub Copilot users.
 
 ## What is this?
