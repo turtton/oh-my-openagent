@@ -20,9 +20,8 @@ Add the package to the `plugin` array in your OpenCode config file. The project-
 }
 ```
 
-- **Project-local**: `opencode.json` in your project root
-- **Global (macOS/Linux)**: `~/.config/opencode/opencode.json`
-- **Global (Windows)**: `%USERPROFILE%\.config\opencode\opencode.json`
+- **Project-local**: `opencode.json` in your project root (works on all platforms)
+- **Global (macOS/Linux/WSL)**: `~/.config/opencode/opencode.json`
 
 If you already have an `opencode.json`, add `"@turtton/oh-my-openagent"` to the existing `plugin` array rather than replacing the file.
 

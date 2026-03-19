@@ -17,8 +17,7 @@ OpenCodeの設定ファイルの `"plugin"` 配列にパッケージ名を追加
 ```
 
 - **プロジェクト限定（全OS対応）**: プロジェクトルートの `opencode.json`
-- **グローバル（macOS/Linux）**: `~/.config/opencode/opencode.json`
-- **グローバル（Windows）**: `%USERPROFILE%\.config\opencode\opencode.json`
+- **グローバル（macOS/Linux/WSL）**: `~/.config/opencode/opencode.json`
 
 既存の `opencode.json` がある場合は、ファイルを置き換えず既存の `plugin` 配列に `"@turtton/oh-my-openagent"` を追記してください。
 
