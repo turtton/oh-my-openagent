@@ -60,7 +60,14 @@ jobs:
           UPSTREAM_VERSION: ${{ steps.upstream.outputs.version }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          COPILOT_REV="${INPUT_REVISION:-1}"
+          if [ -n "$INPUT_REVISION" ]; then
+            COPILOT_REV="$INPUT_REVISION"
+          else
+            EXISTING=$(curl -sf "https://registry.npmjs.org/@turtton%2Foh-my-openagent" 2>/dev/null | \
+              jq -r --arg prefix "${UPSTREAM_VERSION}-copilot." '.versions | keys[] | select(startswith($prefix))' | \
+              sed "s/${UPSTREAM_VERSION}-copilot.//" | sort -n | tail -1)
+            COPILOT_REV=$(( ${EXISTING:-0} + 1 ))
+          fi
           COPILOT_VERSION="${UPSTREAM_VERSION}-copilot.${COPILOT_REV}"
 
           if [ -f .upstream-version ] && [ "$(cat .upstream-version)" = "$UPSTREAM_VERSION" ]; then
