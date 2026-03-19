@@ -10,7 +10,7 @@ This is a patch-based distribution of oh-my-openagent. Instead of maintaining a 
 
 ## Installation
 
-Add the package to the `plugin` array in your OpenCode config file (`~/.config/opencode/opencode.json` for global, or `opencode.json` in your project root):
+Add the package to the `plugin` array in your OpenCode config file. The project-local `opencode.json` works on all platforms; the global path shown below is for macOS/Linux:
 
 ```json
 {
@@ -19,6 +19,12 @@ Add the package to the `plugin` array in your OpenCode config file (`~/.config/o
   ]
 }
 ```
+
+- **Project-local**: `opencode.json` in your project root
+- **Global (macOS/Linux)**: `~/.config/opencode/opencode.json`
+- **Global (Windows)**: `%USERPROFILE%\.config\opencode\opencode.json`
+
+If you already have an `opencode.json`, add `"@turtton/oh-my-openagent"` to the existing `plugin` array rather than replacing the file.
 
 OpenCode will automatically install and load the plugin on next startup.
 
@@ -33,7 +39,7 @@ OpenCode will automatically install and load the plugin on next startup.
 
 ## Re-enabling Disabled Hooks
 
-To re-enable the `todo-continuation-enforcer` hook, add an `.opencode.json` config file in your project root:
+To re-enable the `todo-continuation-enforcer` hook, add an `opencode.json` config file in your project root:
 
 ```json
 {

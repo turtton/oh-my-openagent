@@ -6,7 +6,7 @@
 oh-my-openagentのパッチベース配布です。完全なフォークを維持する代わりに、upstreamのソースコードに対象を絞ったパッチを適用し、`@turtton/oh-my-openagent`としてnpmに公開しています。すべてのパッチはGitHub Copilotの利用モデルで発生する不要なPremium Request消費の削減に焦点を当てています。upstreamの新しいリリースは自動的に追跡され、パッチを適用した状態でCIから公開されます。
 
 ## インストール
-OpenCodeの設定ファイル（グローバルは `~/.config/opencode/opencode.json`、プロジェクト限定は `opencode.json`）の `"plugin"` 配列にパッケージ名を追加します:
+OpenCodeの設定ファイルの `"plugin"` 配列にパッケージ名を追加します。プロジェクトルートの `opencode.json` は全プラットフォームで使用できます:
 
 ```json
 {
@@ -15,6 +15,12 @@ OpenCodeの設定ファイル（グローバルは `~/.config/opencode/opencode.
   ]
 }
 ```
+
+- **プロジェクト限定（全OS対応）**: プロジェクトルートの `opencode.json`
+- **グローバル（macOS/Linux）**: `~/.config/opencode/opencode.json`
+- **グローバル（Windows）**: `%USERPROFILE%\.config\opencode\opencode.json`
+
+既存の `opencode.json` がある場合は、ファイルを置き換えず既存の `plugin` 配列に `"@turtton/oh-my-openagent"` を追記してください。
 
 次回OpenCode起動時に自動的にインストール・ロードされます。
 
@@ -28,7 +34,7 @@ OpenCodeの設定ファイル（グローバルは `~/.config/opencode/opencode.
     - **⚠️ 注意**: このパッチ適用後、`block=true`を使用しないエージェントはバックグラウンドタスク完了時に自動再開しなくなります。パッチ001がエージェントプロンプトで`block=true`を推奨することで緩和していますが、一部のエッジケース（例: 長時間タスクでの`block=true`タイムアウト）では手動介入が必要になる場合があります。
 
 ## 無効化されたフックの再有効化
-`todo-continuation-enforcer`フックを再有効化するには、プロジェクトルートに`.opencode.json`を作成します:
+`todo-continuation-enforcer`フックを再有効化するには、プロジェクトルートに`opencode.json`を作成します:
 ```json
 {
   "disabled_hooks": []
