@@ -6,6 +6,11 @@
  
 -export type BackgroundOutputManager = Pick<BackgroundManager, "getTask">
 +export type BackgroundOutputManager = Pick<BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
+--- a/src/tools/background-task/types.ts
++++ b/src/tools/background-task/types.ts
+@@ -50,1 +50,1 @@
+-export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask">
++export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
 --- a/src/features/background-agent/manager.ts
 +++ b/src/features/background-agent/manager.ts
 @@ -149,6 +149,7 @@
