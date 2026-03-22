@@ -120,7 +120,7 @@ jobs:
           if npm view "@turtton/oh-my-openagent@${COPILOT_VERSION}" version 2>/dev/null; then
             echo "Version $COPILOT_VERSION already exists on npm, skipping publish."
           else
-            npm publish --access public --provenance
+            npm publish --access public --provenance --tag latest
           fi
 
       - name: Update tracked version and tag
