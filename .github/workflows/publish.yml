@@ -1,6 +1,12 @@
 name: Publish
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'patches/**'
+      - 'scripts/**'
+      - 'package.json'
   schedule:
     - cron: '0 9 * * *'
   workflow_dispatch:
