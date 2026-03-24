@@ -1,3 +1,81 @@
+--- a/src/tools/background-task/constants.ts	2026-03-19 00:57:41.734609415 +0900
++++ b/src/tools/background-task/constants.ts	2026-03-19 01:00:56.913989306 +0900
+@@ -2,6 +2,6 @@
+ 
+ Use \`background_output\` to get results. Prompts MUST be in English.`
+ 
+-export const BACKGROUND_OUTPUT_DESCRIPTION = `Get output from background task. Use full_session=true to fetch session messages with filters. System notifies on completion, so block=true rarely needed. - Timeout values are in milliseconds (ms), NOT seconds.`
++export const BACKGROUND_OUTPUT_DESCRIPTION = `Get output from background task. Use full_session=true to fetch session messages with filters. When waiting for agent results, use block=true to actively wait rather than relying on system notifications.`
+ 
+ export const BACKGROUND_CANCEL_DESCRIPTION = `Cancel running background task(s). Use all=true to cancel ALL before final answer.`
+--- a/src/tools/call-omo-agent/background-executor.ts	2026-03-19 00:57:41.734907704 +0900
++++ b/src/tools/call-omo-agent/background-executor.ts	2026-03-19 01:00:58.260863365 +0900
+@@ -85,7 +85,7 @@
+ The system will notify you when the task completes.
+ Use \`background_output\` tool with task_id="${task.id}" to check progress:
+ - block=false (default): Check status immediately - returns full status info
+-- block=true: Wait for completion (rarely needed since system notifies)`
++- block=true: Wait for completion (recommended when waiting for agent results)`
+   } catch (error) {
+     const message = error instanceof Error ? error.message : String(error)
+     return `Failed to launch background agent task: ${message}`
+--- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-19 00:57:41.734907704 +0900
++++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-19 01:00:58.260908555 +0900
+@@ -81,7 +81,7 @@
+ The system will notify you when the task completes.
+ Use \`background_output\` tool with task_id="${task.id}" to check progress:
+ - block=false (default): Check status immediately - returns full status info
+-- block=true: Wait for completion (rarely needed since system notifies)`
++- block=true: Wait for completion (recommended when waiting for agent results)`
+ 	} catch (error) {
+ 		const message = error instanceof Error ? error.message : String(error)
+ 		return `Failed to launch background agent task: ${message}`
+--- a/src/tools/background-task/create-background-task.ts	2026-03-19 00:57:41.734609415 +0900
++++ b/src/tools/background-task/create-background-task.ts	2026-03-19 01:00:58.260942315 +0900
+@@ -115,7 +115,7 @@
+ The system will notify you when the task completes.
+ Use \`background_output\` tool with task_id="${task.id}" to check progress:
+ - block=false (default): Check status immediately - returns full status info
+-- block=true: Wait for completion (rarely needed since system notifies)`
++- block=true: Wait for completion (recommended when waiting for agent results)`
+       } catch (error) {
+         const message = error instanceof Error ? error.message : String(error)
+         return `[ERROR] Failed to launch background task: ${message}`
+--- a/src/agents/dynamic-agent-prompt-builder.ts	2026-03-19 00:57:41.716548666 +0900
++++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-03-19 01:01:18.915875690 +0900
+@@ -308,8 +308,8 @@
+ 
+ **Collect Oracle results before your final answer. No exceptions.**
+ 
+-- Oracle takes minutes. When done with your own work: **end your response** — wait for the \`<system-reminder>\`.
+-- Do NOT poll \`background_output\` on a running Oracle. The notification will come.
++- Oracle takes minutes. Use \`background_output(task_id="...", block=true)\` to wait for results.
++
+ - Never cancel Oracle.
+ </Oracle_Usage>`
+ }
+@@ -336,7 +336,7 @@
+     "- **Testing**: Deleting failing tests to \"pass\"",
+     "- **Search**: Firing agents for single-line typos or obvious syntax errors",
+     "- **Debugging**: Shotgun debugging, random changes",
+-    "- **Background Tasks**: Polling `background_output` on running tasks — end response and wait for notification",
++    "- **Background Tasks**: Not using `background_output(block=true)` when waiting for task results — always block-wait, do not rely on system notifications",
+     "- **Delegation Duplication**: Delegating exploration to explore/librarian and then manually doing the same search yourself",
+     "- **Oracle**: Delivering answer without collecting Oracle results",
+   ]
+--- a/src/agents/sisyphus.ts	2026-03-19 00:57:41.717402565 +0900
++++ b/src/agents/sisyphus.ts	2026-03-19 01:01:21.027138186 +0900
+@@ -236,8 +236,8 @@
+ 2. Continue only with non-overlapping work
+    - If you have DIFFERENT independent work \u2192 do it now
+    - Otherwise \u2192 **END YOUR RESPONSE.**
+-3. System sends \`<system-reminder>\` on each task completion — then call \`background_output(task_id="...")\`
+-4. Need results not yet ready? **End your response.** The notification will trigger your next turn.
++3. When waiting for results: call \`background_output(task_id="...", block=true)\` to actively wait until completion.
++4. Do NOT rely on system notifications to resume — use block=true to stay in the same turn.
+ 5. Cleanup: Cancel disposable tasks individually via \`background_cancel(taskId="...")\`
+ 
+ ${buildAntiDuplicationSection()}
 --- a/src/tools/background-task/clients.ts
 +++ b/src/tools/background-task/clients.ts
 @@ -29,4 +29,4 @@

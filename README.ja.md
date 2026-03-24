@@ -25,12 +25,9 @@ OpenCodeの設定ファイルの `"plugin"` 配列にパッケージ名を追加
 
 ## 適用パッチ
 各パッチの説明:
-- **001-background-output-block-true**: `background_output`ツールのガイダンスを6つのソースファイルで変更します。upstreamのデフォルトではバックグラウンドタスク完了時に「レスポンスを終了してシステム通知を待つ」ことを推奨しており、各通知が新しいエージェントターンをトリガーしてPremium Requestを消費します。このパッチは代わりに`block=true`で現在のターン内で結果を待つことを推奨し、通知トリガーによる余分なPremium Request消費を回避します。
-    - 対象ファイル: `constants.ts`, `background-executor.ts`, `background-agent-executor.ts`, `create-background-task.ts`, `dynamic-agent-prompt-builder.ts`, `sisyphus.ts`
+- **001-block-true-waiting**: バックグラウンドタスクの結果取得時に`block=true`の使用を推奨し、不要なPremium Request消費を削減します。upstreamのデフォルトではバックグラウンドタスク完了時に「レスポンスを終了してシステム通知を待つ」ことを推奨しており、各通知が新しいエージェントターンをトリガーしてPremium Requestを消費します。このパッチは代わりに`block=true`で現在のターン内で結果を待つことを推奨し、ランタイム側もそれを適切にサポートするよう変更します: アクティブにポーリング中のタスクを追跡して冗長な通知を抑制（`noReply: true`）、`block=true`のタイムアウト制限を撤廃（無期限待機、`timeout`パラメータはdeprecatedとなり無視されます）、エージェントプロンプトとツール説明のガイダンステキストを全面更新。ポーリングされていないタスクについては、元の通知駆動の`noReply: !allComplete`ロジックが維持されます。
+    - 対象ファイル: `src/tools/background-task/constants.ts`, `src/tools/call-omo-agent/background-executor.ts`, `src/tools/call-omo-agent/background-agent-executor.ts`, `src/tools/background-task/create-background-task.ts`, `src/agents/dynamic-agent-prompt-builder.ts`, `src/agents/sisyphus.ts`, `src/tools/background-task/clients.ts`, `src/tools/background-task/types.ts`, `src/features/background-agent/manager.ts`, `src/tools/background-task/create-background-output.ts`
 - **002-disable-todo-continuation-enforcer**: `todo-continuation-enforcer`フックをデフォルトで無効化します。このフックはTODOリストに基づいて自動的に作業を継続し、意図しない追加のエージェントターン（とPremium Request）をトリガーする場合があります。設定初期化時のデフォルト`disabled_hooks`リストに追加することで無効化しています。
-- **003-noreply-true**: バックグラウンドタスク完了通知を常に`noReply: true`に強制します。このパッチがない場合、すべてのバックグラウンドタスクが完了したときに`noReply: false`の通知が不要な追加エージェントターンをトリガーします — `block=true`（パッチ001）による同一ターン内の結果取得で既に結果を受け取っていても発生します。このパッチは通知トリガーによる追加ターンを抑制し、そのターンが消費するPremium Requestを回避します。
-    - 対象ファイル: `manager.ts`（2箇所）
-    - **⚠️ 注意**: このパッチ適用後、`block=true`を使用しないエージェントはバックグラウンドタスク完了時に自動再開しなくなります。パッチ001がエージェントプロンプトで`block=true`を推奨することで緩和していますが、一部のエッジケース（例: 長時間タスクでの`block=true`タイムアウト）では手動介入が必要になる場合があります。
 
 ## 無効化されたフックの再有効化
 `todo-continuation-enforcer`フックを再有効化するには、プロジェクトルートに`opencode.json`を作成します:
