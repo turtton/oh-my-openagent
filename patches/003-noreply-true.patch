@@ -6,28 +6,38 @@
  
 -export type BackgroundOutputManager = Pick<BackgroundManager, "getTask">
 +export type BackgroundOutputManager = Pick<BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
+
 --- a/src/tools/background-task/types.ts
 +++ b/src/tools/background-task/types.ts
-@@ -50,1 +50,1 @@
+@@ -47,7 +47,7 @@
+   }
+ }
+ 
 -export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask">
 +export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
+ 
+ export type FullSessionMessagePart = {
+   type?: string
+
 --- a/src/features/background-agent/manager.ts
 +++ b/src/features/background-agent/manager.ts
-@@ -149,6 +149,7 @@
+@@ -149,6 +149,8 @@
    private completedTaskSummaries: Map<string, Array<{id: string, description: string}>> = new Map()
    private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
    private notificationQueueByParent: Map<string, Promise<void>> = new Map()
 +  private blockingTaskRefCounts: Map<string, number> = new Map()
++  private wasBlockedTasks: Set<string> = new Set()
    private rootDescendantCounts: Map<string, number>
    private preStartDescendantReservations: Set<string>
    private enableParentSessionNotifications: boolean
-@@ -182,6 +183,24 @@
+@@ -182,6 +184,25 @@
      this.registerProcessCleanup()
    }
  
 +  registerBlockingTask(taskId: string): void {
 +    const current = this.blockingTaskRefCounts.get(taskId) ?? 0
 +    this.blockingTaskRefCounts.set(taskId, current + 1)
++    this.wasBlockedTasks.add(taskId)
 +  }
 +
 +  unregisterBlockingTask(taskId: string): void {
@@ -40,13 +50,21 @@
 +  }
 +
 +  isTaskBlocking(taskId: string): boolean {
-+    return (this.blockingTaskRefCounts.get(taskId) ?? 0) > 0
++    return (this.blockingTaskRefCounts.get(taskId) ?? 0) > 0 || this.wasBlockedTasks.has(taskId)
 +  }
 +
    async assertCanSpawn(parentSessionID: string): Promise<SubagentSpawnContext> {
      const spawnContext = await resolveSubagentSpawnContext(this.client, parentSessionID)
      const maxDepth = getMaxSubagentDepth(this.config)
-@@ -1646,10 +1665,11 @@
+@@ -1299,6 +1320,7 @@
+ 
+       this.clearNotificationsForTask(taskId)
+       this.tasks.delete(taskId)
++      this.wasBlockedTasks.delete(taskId)
+       this.clearTaskHistoryWhenParentTasksGone(task.parentSessionID)
+       if (task.sessionID) {
+         subagentSessions.delete(task.sessionID)
+@@ -1646,10 +1668,11 @@
          })
  
          try {
@@ -59,7 +77,7 @@
                ...(agent !== undefined ? { agent } : {}),
                ...(model !== undefined ? { model } : {}),
                ...(resolvedTools ? { tools: resolvedTools } : {}),
-@@ -1659,7 +1679,8 @@
+@@ -1659,9 +1682,12 @@
            log("[background-agent] Sent notification to parent session:", {
              taskId: task.id,
              allComplete,
@@ -67,8 +85,21 @@
 +            noReply: shouldSuppressReply,
 +            isBlocking: this.isTaskBlocking(task.id),
            })
++          this.wasBlockedTasks.delete(task.id)
          } catch (error) {
++          this.wasBlockedTasks.delete(task.id)
            if (isAbortedSessionError(error)) {
+             log("[background-agent] Parent session aborted while sending notification; continuing cleanup:", {
+               taskId: task.id,
+@@ -1673,6 +1699,7 @@
+           }
+         }
+       } else {
++        this.wasBlockedTasks.delete(task.id)
+         log("[background-agent] Parent session notifications disabled, skipping prompt injection:", {
+           taskId: task.id,
+           parentSessionID: task.parentSessionID,
+
 --- a/src/tools/background-task/create-background-output.ts
 +++ b/src/tools/background-task/create-background-output.ts
 @@ -37,10 +37,6 @@
@@ -82,7 +113,9 @@
  export function createBackgroundOutput(manager: BackgroundOutputManager, client: BackgroundOutputClient): ToolDefinition {
    return tool({
      description: BACKGROUND_OUTPUT_DESCRIPTION,
-@@ -52,7 +48,7 @@
+@@ -50,9 +46,9 @@
+         .boolean()
+         .optional()
          .describe(
 -          "Wait for completion (default: false). System notifies when done, so blocking is rarely needed."
 +          "Wait for completion (default: false). When waiting for agent results, use block=true to actively wait rather than relying on system notifications."
