@@ -1,6 +1,6 @@
 diff -ruN a/src/agents/dynamic-agent-prompt-builder.ts b/src/agents/dynamic-agent-prompt-builder.ts
---- a/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 12:29:13.122838222 +0900
-+++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 12:29:13.126704007 +0900
+--- a/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 13:17:01.007009370 +0900
++++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 13:17:01.011299653 +0900
 @@ -308,8 +308,8 @@
  
  **Collect Oracle results before your final answer. No exceptions.**
@@ -22,8 +22,8 @@ diff -ruN a/src/agents/dynamic-agent-prompt-builder.ts b/src/agents/dynamic-agen
      "- **Oracle**: Delivering answer without collecting Oracle results",
    ]
 diff -ruN a/src/agents/sisyphus.ts b/src/agents/sisyphus.ts
---- a/src/agents/sisyphus.ts	2026-03-28 12:29:13.457192343 +0900
-+++ b/src/agents/sisyphus.ts	2026-03-28 12:29:13.461238169 +0900
+--- a/src/agents/sisyphus.ts	2026-03-28 13:17:01.300991445 +0900
++++ b/src/agents/sisyphus.ts	2026-03-28 13:17:01.304758135 +0900
 @@ -236,8 +236,8 @@
  2. Continue only with non-overlapping work
     - If you have DIFFERENT independent work \u2192 do it now
@@ -36,8 +36,8 @@ diff -ruN a/src/agents/sisyphus.ts b/src/agents/sisyphus.ts
  
  ${buildAntiDuplicationSection()}
 diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-agent/manager.ts
---- a/src/features/background-agent/manager.ts	2026-03-28 12:29:13.817163693 +0900
-+++ b/src/features/background-agent/manager.ts	2026-03-28 12:29:13.821362886 +0900
+--- a/src/features/background-agent/manager.ts	2026-03-28 13:17:01.661758114 +0900
++++ b/src/features/background-agent/manager.ts	2026-03-28 13:17:01.666321729 +0900
 @@ -149,6 +149,8 @@
    private completedTaskSummaries: Map<string, Array<{id: string, description: string}>> = new Map()
    private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -73,71 +73,135 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
    async assertCanSpawn(parentSessionID: string): Promise<SubagentSpawnContext> {
      const spawnContext = await resolveSubagentSpawnContext(this.client, parentSessionID)
      const maxDepth = getMaxSubagentDepth(this.config)
-@@ -1299,6 +1320,7 @@
+@@ -1299,6 +1320,8 @@
  
        this.clearNotificationsForTask(taskId)
        this.tasks.delete(taskId)
 +      this.wasBlockedTasks.delete(taskId)
++      this.blockingTaskRefCounts.delete(taskId)
        this.clearTaskHistoryWhenParentTasksGone(task.parentSessionID)
        if (task.sessionID) {
          subagentSessions.delete(task.sessionID)
-@@ -1646,22 +1668,31 @@
-         })
+@@ -1516,13 +1539,17 @@
+       })
+     }
  
+-    if (!this.completedTaskSummaries.has(task.parentSessionID)) {
+-      this.completedTaskSummaries.set(task.parentSessionID, [])
++    const shouldSuppressNotification = this.isTaskBlocking(task.id)
++
++    if (!shouldSuppressNotification) {
++      if (!this.completedTaskSummaries.has(task.parentSessionID)) {
++        this.completedTaskSummaries.set(task.parentSessionID, [])
++      }
++      this.completedTaskSummaries.get(task.parentSessionID)!.push({
++        id: task.id,
++        description: task.description,
++      })
+     }
+-    this.completedTaskSummaries.get(task.parentSessionID)!.push({
+-      id: task.id,
+-      description: task.description,
+-    })
+ 
+     // Update pending tracking and check if all tasks complete
+     const pendingSet = this.pendingByParent.get(task.parentSessionID)
+@@ -1543,7 +1570,7 @@
+     }
+ 
+     const completedTasks = allComplete
+-      ? (this.completedTaskSummaries.get(task.parentSessionID) ?? [{ id: task.id, description: task.description }])
++      ? (this.completedTaskSummaries.get(task.parentSessionID) ?? [])
+       : []
+ 
+     if (allComplete) {
+@@ -1559,8 +1586,8 @@
+           : "CANCELLED"
+     const errorInfo = task.error ? `\n**Error:** ${task.error}` : ""
+ 
+-    let notification: string
+-    if (allComplete) {
++    let notification: string | null = null
++    if (allComplete && completedTasks.length > 0) {
+         const completedTasksText = completedTasks
+           .map(t => `- \`${t.id}\`: ${t.description}`)
+           .join("\n")
+@@ -1569,13 +1596,13 @@
+ [ALL BACKGROUND TASKS COMPLETE]
+ 
+ **Completed:**
+-${completedTasksText || `- \`${task.id}\`: ${task.description}`}
++${completedTasksText}
+ 
+ Use \`background_output(task_id="<id>")\` to retrieve each result.
+ </system-reminder>`
+-    } else {
+-      // Individual completion - silent notification
+-      notification = `<system-reminder>
++    } else if (!shouldSuppressNotification) {
++      // Individual completion - silent notification (non-blocked tasks only)
++      notification = !allComplete ? `<system-reminder>
+ [BACKGROUND TASK ${statusText}]
+ **ID:** \`${task.id}\`
+ **Description:** ${task.description}
+@@ -1585,6 +1612,13 @@
+ Do NOT poll - continue productive work.
+ 
+ Use \`background_output(task_id="${task.id}")\` to retrieve this result when ready.
++</system-reminder>` : `<system-reminder>
++[ALL BACKGROUND TASKS COMPLETE]
++
++**Completed:**
++- \`${task.id}\`: ${task.description}
++
++Use \`background_output(task_id="<id>")\` to retrieve each result.
+ </system-reminder>`
+     }
+ 
+@@ -1592,7 +1626,7 @@
+       let model: { providerID: string; modelID: string } | undefined
+       let tools: Record<string, boolean> | undefined = task.parentTools
+ 
+-      if (this.enableParentSessionNotifications) {
++      if (this.enableParentSessionNotifications && notification !== null) {
          try {
--          await this.client.session.promptAsync({
--            path: { id: task.parentSessionID },
--            body: {
-+          if (this.isTaskBlocking(task.id)) {
-+            log("[background-agent] Skipping notification for blocking task (collected via block=true):", {
-+              taskId: task.id,
-+              allComplete,
-+            })
-+            this.wasBlockedTasks.delete(task.id)
-+          } else {
-+            await this.client.session.promptAsync({
-+              path: { id: task.parentSessionID },
-+              body: {
-+                noReply: !allComplete,
-+                ...(agent !== undefined ? { agent } : {}),
-+                ...(model !== undefined ? { model } : {}),
-+                ...(resolvedTools ? { tools: resolvedTools } : {}),
-+                parts: [createInternalAgentTextPart(notification)],
-+              },
-+            })
-+            log("[background-agent] Sent notification to parent session:", {
-+              taskId: task.id,
-+              allComplete,
-               noReply: !allComplete,
--              ...(agent !== undefined ? { agent } : {}),
--              ...(model !== undefined ? { model } : {}),
--              ...(resolvedTools ? { tools: resolvedTools } : {}),
--              parts: [createInternalAgentTextPart(notification)],
--            },
--          })
--          log("[background-agent] Sent notification to parent session:", {
--            taskId: task.id,
--            allComplete,
--            noReply: !allComplete,
--          })
-+            })
-+          }
-         } catch (error) {
-+          this.wasBlockedTasks.delete(task.id)
-           if (isAbortedSessionError(error)) {
-             log("[background-agent] Parent session aborted while sending notification; continuing cleanup:", {
-               taskId: task.id,
-@@ -1673,6 +1704,7 @@
+           const messagesResp = await this.client.session.messages({ path: { id: task.parentSessionID } })
+           const messages = normalizeSDKResponse(messagesResp, [] as Array<{
+@@ -1672,13 +1706,21 @@
+             log("[background-agent] Failed to send notification:", error)
            }
          }
-       } else {
-+        this.wasBlockedTasks.delete(task.id)
+-      } else {
++      } else if (!this.enableParentSessionNotifications) {
          log("[background-agent] Parent session notifications disabled, skipping prompt injection:", {
            taskId: task.id,
            parentSessionID: task.parentSessionID,
+         })
+       }
+ 
++      if (shouldSuppressNotification) {
++        log("[background-agent] Cleaned up blocking state for task collected via block=true:", {
++          taskId: task.id,
++          notificationSent: notification !== null,
++        })
++        this.wasBlockedTasks.delete(task.id)
++      }
++
+     if (task.status !== "running" && task.status !== "pending") {
+       this.scheduleTaskRemoval(task.id)
+     }
+@@ -1915,6 +1957,8 @@
+     this.processingKeys.clear()
+     this.taskHistory.clearAll()
+     this.completedTaskSummaries.clear()
++    this.blockingTaskRefCounts.clear()
++    this.wasBlockedTasks.clear()
+     this.unregisterProcessCleanup()
+     log("[background-agent] Shutdown complete")
+ 
 diff -ruN a/src/tools/background-task/clients.ts b/src/tools/background-task/clients.ts
---- a/src/tools/background-task/clients.ts	2026-03-28 12:29:14.105283142 +0900
-+++ b/src/tools/background-task/clients.ts	2026-03-28 12:29:14.109880055 +0900
+--- a/src/tools/background-task/clients.ts	2026-03-28 13:17:01.975415903 +0900
++++ b/src/tools/background-task/clients.ts	2026-03-28 13:17:01.978758095 +0900
 @@ -29,4 +29,4 @@
    }
  }
@@ -145,8 +209,8 @@ diff -ruN a/src/tools/background-task/clients.ts b/src/tools/background-task/cli
 -export type BackgroundOutputManager = Pick<BackgroundManager, "getTask">
 +export type BackgroundOutputManager = Pick<BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
 diff -ruN a/src/tools/background-task/constants.ts b/src/tools/background-task/constants.ts
---- a/src/tools/background-task/constants.ts	2026-03-28 12:29:14.398321424 +0900
-+++ b/src/tools/background-task/constants.ts	2026-03-28 12:29:14.401794431 +0900
+--- a/src/tools/background-task/constants.ts	2026-03-28 13:17:02.271439225 +0900
++++ b/src/tools/background-task/constants.ts	2026-03-28 13:17:02.275087899 +0900
 @@ -2,6 +2,6 @@
  
  Use \`background_output\` to get results. Prompts MUST be in English.`
@@ -156,8 +220,8 @@ diff -ruN a/src/tools/background-task/constants.ts b/src/tools/background-task/c
  
  export const BACKGROUND_CANCEL_DESCRIPTION = `Cancel running background task(s). Use all=true to cancel ALL before final answer.`
 diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/background-task/create-background-output.ts
---- a/src/tools/background-task/create-background-output.ts	2026-03-28 12:29:14.714649241 +0900
-+++ b/src/tools/background-task/create-background-output.ts	2026-03-28 12:29:14.718310828 +0900
+--- a/src/tools/background-task/create-background-output.ts	2026-03-28 13:17:02.600015239 +0900
++++ b/src/tools/background-task/create-background-output.ts	2026-03-28 13:17:02.603599844 +0900
 @@ -37,10 +37,6 @@
    return status === "pending" || status === "running"
  }
@@ -256,8 +320,8 @@ diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/ba
          return `Error getting output: ${error instanceof Error ? error.message : String(error)}`
        }
 diff -ruN a/src/tools/background-task/create-background-task.ts b/src/tools/background-task/create-background-task.ts
---- a/src/tools/background-task/create-background-task.ts	2026-03-28 12:29:15.022734119 +0900
-+++ b/src/tools/background-task/create-background-task.ts	2026-03-28 12:29:15.026033506 +0900
+--- a/src/tools/background-task/create-background-task.ts	2026-03-28 13:17:02.932249639 +0900
++++ b/src/tools/background-task/create-background-task.ts	2026-03-28 13:17:02.935962624 +0900
 @@ -115,7 +115,7 @@
  The system will notify you when the task completes.
  Use \`background_output\` tool with task_id="${task.id}" to check progress:
@@ -268,8 +332,8 @@ diff -ruN a/src/tools/background-task/create-background-task.ts b/src/tools/back
          const message = error instanceof Error ? error.message : String(error)
          return `[ERROR] Failed to launch background task: ${message}`
 diff -ruN a/src/tools/background-task/types.ts b/src/tools/background-task/types.ts
---- a/src/tools/background-task/types.ts	2026-03-28 12:29:15.317547024 +0900
-+++ b/src/tools/background-task/types.ts	2026-03-28 12:29:15.321048101 +0900
+--- a/src/tools/background-task/types.ts	2026-03-28 13:17:03.259779964 +0900
++++ b/src/tools/background-task/types.ts	2026-03-28 13:17:03.264181008 +0900
 @@ -47,7 +47,7 @@
    }
  }
@@ -280,8 +344,8 @@ diff -ruN a/src/tools/background-task/types.ts b/src/tools/background-task/types
  export type FullSessionMessagePart = {
    type?: string
 diff -ruN a/src/tools/call-omo-agent/background-agent-executor.ts b/src/tools/call-omo-agent/background-agent-executor.ts
---- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 12:29:15.613568026 +0900
-+++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 12:29:15.616875813 +0900
+--- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 13:17:03.578799511 +0900
++++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 13:17:03.581757990 +0900
 @@ -81,7 +81,7 @@
  The system will notify you when the task completes.
  Use \`background_output\` tool with task_id="${task.id}" to check progress:
@@ -292,8 +356,8 @@ diff -ruN a/src/tools/call-omo-agent/background-agent-executor.ts b/src/tools/ca
  		const message = error instanceof Error ? error.message : String(error)
  		return `Failed to launch background agent task: ${message}`
 diff -ruN a/src/tools/call-omo-agent/background-executor.ts b/src/tools/call-omo-agent/background-executor.ts
---- a/src/tools/call-omo-agent/background-executor.ts	2026-03-28 12:29:15.941191982 +0900
-+++ b/src/tools/call-omo-agent/background-executor.ts	2026-03-28 12:29:15.944750118 +0900
+--- a/src/tools/call-omo-agent/background-executor.ts	2026-03-28 13:17:03.882949249 +0900
++++ b/src/tools/call-omo-agent/background-executor.ts	2026-03-28 13:17:03.888322102 +0900
 @@ -85,7 +85,7 @@
  The system will notify you when the task completes.
  Use \`background_output\` tool with task_id="${task.id}" to check progress:
