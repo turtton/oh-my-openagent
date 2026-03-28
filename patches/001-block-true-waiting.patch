@@ -1,48 +1,6 @@
---- a/src/tools/background-task/constants.ts	2026-03-19 00:57:41.734609415 +0900
-+++ b/src/tools/background-task/constants.ts	2026-03-19 01:00:56.913989306 +0900
-@@ -2,6 +2,6 @@
- 
- Use \`background_output\` to get results. Prompts MUST be in English.`
- 
--export const BACKGROUND_OUTPUT_DESCRIPTION = `Get output from background task. Use full_session=true to fetch session messages with filters. System notifies on completion, so block=true rarely needed. - Timeout values are in milliseconds (ms), NOT seconds.`
-+export const BACKGROUND_OUTPUT_DESCRIPTION = `Get output from background task. Use full_session=true to fetch session messages with filters. When waiting for agent results, use block=true to actively wait rather than relying on system notifications.`
- 
- export const BACKGROUND_CANCEL_DESCRIPTION = `Cancel running background task(s). Use all=true to cancel ALL before final answer.`
---- a/src/tools/call-omo-agent/background-executor.ts	2026-03-19 00:57:41.734907704 +0900
-+++ b/src/tools/call-omo-agent/background-executor.ts	2026-03-19 01:00:58.260863365 +0900
-@@ -85,7 +85,7 @@
- The system will notify you when the task completes.
- Use \`background_output\` tool with task_id="${task.id}" to check progress:
- - block=false (default): Check status immediately - returns full status info
--- block=true: Wait for completion (rarely needed since system notifies)`
-+- block=true: Wait for completion (recommended when waiting for agent results)`
-   } catch (error) {
-     const message = error instanceof Error ? error.message : String(error)
-     return `Failed to launch background agent task: ${message}`
---- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-19 00:57:41.734907704 +0900
-+++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-19 01:00:58.260908555 +0900
-@@ -81,7 +81,7 @@
- The system will notify you when the task completes.
- Use \`background_output\` tool with task_id="${task.id}" to check progress:
- - block=false (default): Check status immediately - returns full status info
--- block=true: Wait for completion (rarely needed since system notifies)`
-+- block=true: Wait for completion (recommended when waiting for agent results)`
- 	} catch (error) {
- 		const message = error instanceof Error ? error.message : String(error)
- 		return `Failed to launch background agent task: ${message}`
---- a/src/tools/background-task/create-background-task.ts	2026-03-19 00:57:41.734609415 +0900
-+++ b/src/tools/background-task/create-background-task.ts	2026-03-19 01:00:58.260942315 +0900
-@@ -115,7 +115,7 @@
- The system will notify you when the task completes.
- Use \`background_output\` tool with task_id="${task.id}" to check progress:
- - block=false (default): Check status immediately - returns full status info
--- block=true: Wait for completion (rarely needed since system notifies)`
-+- block=true: Wait for completion (recommended when waiting for agent results)`
-       } catch (error) {
-         const message = error instanceof Error ? error.message : String(error)
-         return `[ERROR] Failed to launch background task: ${message}`
---- a/src/agents/dynamic-agent-prompt-builder.ts	2026-03-19 00:57:41.716548666 +0900
-+++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-03-19 01:01:18.915875690 +0900
+diff -ruN a/src/agents/dynamic-agent-prompt-builder.ts b/src/agents/dynamic-agent-prompt-builder.ts
+--- a/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 12:29:13.122838222 +0900
++++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 12:29:13.126704007 +0900
 @@ -308,8 +308,8 @@
  
  **Collect Oracle results before your final answer. No exceptions.**
@@ -63,8 +21,9 @@
      "- **Delegation Duplication**: Delegating exploration to explore/librarian and then manually doing the same search yourself",
      "- **Oracle**: Delivering answer without collecting Oracle results",
    ]
---- a/src/agents/sisyphus.ts	2026-03-19 00:57:41.717402565 +0900
-+++ b/src/agents/sisyphus.ts	2026-03-19 01:01:21.027138186 +0900
+diff -ruN a/src/agents/sisyphus.ts b/src/agents/sisyphus.ts
+--- a/src/agents/sisyphus.ts	2026-03-28 12:29:13.457192343 +0900
++++ b/src/agents/sisyphus.ts	2026-03-28 12:29:13.461238169 +0900
 @@ -236,8 +236,8 @@
  2. Continue only with non-overlapping work
     - If you have DIFFERENT independent work \u2192 do it now
@@ -76,29 +35,9 @@
  5. Cleanup: Cancel disposable tasks individually via \`background_cancel(taskId="...")\`
  
  ${buildAntiDuplicationSection()}
---- a/src/tools/background-task/clients.ts
-+++ b/src/tools/background-task/clients.ts
-@@ -29,4 +29,4 @@
-   }
- }
- 
--export type BackgroundOutputManager = Pick<BackgroundManager, "getTask">
-+export type BackgroundOutputManager = Pick<BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
-
---- a/src/tools/background-task/types.ts
-+++ b/src/tools/background-task/types.ts
-@@ -47,7 +47,7 @@
-   }
- }
- 
--export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask">
-+export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
- 
- export type FullSessionMessagePart = {
-   type?: string
-
---- a/src/features/background-agent/manager.ts
-+++ b/src/features/background-agent/manager.ts
+diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-agent/manager.ts
+--- a/src/features/background-agent/manager.ts	2026-03-28 12:29:13.817163693 +0900
++++ b/src/features/background-agent/manager.ts	2026-03-28 12:29:13.821362886 +0900
 @@ -149,6 +149,8 @@
    private completedTaskSummaries: Map<string, Array<{id: string, description: string}>> = new Map()
    private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
@@ -142,34 +81,53 @@
        this.clearTaskHistoryWhenParentTasksGone(task.parentSessionID)
        if (task.sessionID) {
          subagentSessions.delete(task.sessionID)
-@@ -1646,10 +1668,11 @@
+@@ -1646,22 +1668,31 @@
          })
  
          try {
-+          const shouldSuppressReply = !allComplete || this.isTaskBlocking(task.id)
-           await this.client.session.promptAsync({
-             path: { id: task.parentSessionID },
-             body: {
--              noReply: !allComplete,
-+              noReply: shouldSuppressReply,
-               ...(agent !== undefined ? { agent } : {}),
-               ...(model !== undefined ? { model } : {}),
-               ...(resolvedTools ? { tools: resolvedTools } : {}),
-@@ -1659,9 +1682,12 @@
-           log("[background-agent] Sent notification to parent session:", {
-             taskId: task.id,
-             allComplete,
+-          await this.client.session.promptAsync({
+-            path: { id: task.parentSessionID },
+-            body: {
++          if (this.isTaskBlocking(task.id)) {
++            log("[background-agent] Skipping notification for blocking task (collected via block=true):", {
++              taskId: task.id,
++              allComplete,
++            })
++            this.wasBlockedTasks.delete(task.id)
++          } else {
++            await this.client.session.promptAsync({
++              path: { id: task.parentSessionID },
++              body: {
++                noReply: !allComplete,
++                ...(agent !== undefined ? { agent } : {}),
++                ...(model !== undefined ? { model } : {}),
++                ...(resolvedTools ? { tools: resolvedTools } : {}),
++                parts: [createInternalAgentTextPart(notification)],
++              },
++            })
++            log("[background-agent] Sent notification to parent session:", {
++              taskId: task.id,
++              allComplete,
+               noReply: !allComplete,
+-              ...(agent !== undefined ? { agent } : {}),
+-              ...(model !== undefined ? { model } : {}),
+-              ...(resolvedTools ? { tools: resolvedTools } : {}),
+-              parts: [createInternalAgentTextPart(notification)],
+-            },
+-          })
+-          log("[background-agent] Sent notification to parent session:", {
+-            taskId: task.id,
+-            allComplete,
 -            noReply: !allComplete,
-+            noReply: shouldSuppressReply,
-+            isBlocking: this.isTaskBlocking(task.id),
-           })
-+          this.wasBlockedTasks.delete(task.id)
+-          })
++            })
++          }
          } catch (error) {
 +          this.wasBlockedTasks.delete(task.id)
            if (isAbortedSessionError(error)) {
              log("[background-agent] Parent session aborted while sending notification; continuing cleanup:", {
                taskId: task.id,
-@@ -1673,6 +1699,7 @@
+@@ -1673,6 +1704,7 @@
            }
          }
        } else {
@@ -177,9 +135,29 @@
          log("[background-agent] Parent session notifications disabled, skipping prompt injection:", {
            taskId: task.id,
            parentSessionID: task.parentSessionID,
-
---- a/src/tools/background-task/create-background-output.ts
-+++ b/src/tools/background-task/create-background-output.ts
+diff -ruN a/src/tools/background-task/clients.ts b/src/tools/background-task/clients.ts
+--- a/src/tools/background-task/clients.ts	2026-03-28 12:29:14.105283142 +0900
++++ b/src/tools/background-task/clients.ts	2026-03-28 12:29:14.109880055 +0900
+@@ -29,4 +29,4 @@
+   }
+ }
+ 
+-export type BackgroundOutputManager = Pick<BackgroundManager, "getTask">
++export type BackgroundOutputManager = Pick<BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
+diff -ruN a/src/tools/background-task/constants.ts b/src/tools/background-task/constants.ts
+--- a/src/tools/background-task/constants.ts	2026-03-28 12:29:14.398321424 +0900
++++ b/src/tools/background-task/constants.ts	2026-03-28 12:29:14.401794431 +0900
+@@ -2,6 +2,6 @@
+ 
+ Use \`background_output\` to get results. Prompts MUST be in English.`
+ 
+-export const BACKGROUND_OUTPUT_DESCRIPTION = `Get output from background task. Use full_session=true to fetch session messages with filters. System notifies on completion, so block=true rarely needed. - Timeout values are in milliseconds (ms), NOT seconds.`
++export const BACKGROUND_OUTPUT_DESCRIPTION = `Get output from background task. Use full_session=true to fetch session messages with filters. When waiting for agent results, use block=true to actively wait rather than relying on system notifications.`
+ 
+ export const BACKGROUND_CANCEL_DESCRIPTION = `Cancel running background task(s). Use all=true to cancel ALL before final answer.`
+diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/background-task/create-background-output.ts
+--- a/src/tools/background-task/create-background-output.ts	2026-03-28 12:29:14.714649241 +0900
++++ b/src/tools/background-task/create-background-output.ts	2026-03-28 12:29:14.718310828 +0900
 @@ -37,10 +37,6 @@
    return status === "pending" || status === "running"
  }
@@ -277,3 +255,51 @@
        } catch (error) {
          return `Error getting output: ${error instanceof Error ? error.message : String(error)}`
        }
+diff -ruN a/src/tools/background-task/create-background-task.ts b/src/tools/background-task/create-background-task.ts
+--- a/src/tools/background-task/create-background-task.ts	2026-03-28 12:29:15.022734119 +0900
++++ b/src/tools/background-task/create-background-task.ts	2026-03-28 12:29:15.026033506 +0900
+@@ -115,7 +115,7 @@
+ The system will notify you when the task completes.
+ Use \`background_output\` tool with task_id="${task.id}" to check progress:
+ - block=false (default): Check status immediately - returns full status info
+-- block=true: Wait for completion (rarely needed since system notifies)`
++- block=true: Wait for completion (recommended when waiting for agent results)`
+       } catch (error) {
+         const message = error instanceof Error ? error.message : String(error)
+         return `[ERROR] Failed to launch background task: ${message}`
+diff -ruN a/src/tools/background-task/types.ts b/src/tools/background-task/types.ts
+--- a/src/tools/background-task/types.ts	2026-03-28 12:29:15.317547024 +0900
++++ b/src/tools/background-task/types.ts	2026-03-28 12:29:15.321048101 +0900
+@@ -47,7 +47,7 @@
+   }
+ }
+ 
+-export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask">
++export type BackgroundOutputManager = Pick<import("../../features/background-agent").BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
+ 
+ export type FullSessionMessagePart = {
+   type?: string
+diff -ruN a/src/tools/call-omo-agent/background-agent-executor.ts b/src/tools/call-omo-agent/background-agent-executor.ts
+--- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 12:29:15.613568026 +0900
++++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 12:29:15.616875813 +0900
+@@ -81,7 +81,7 @@
+ The system will notify you when the task completes.
+ Use \`background_output\` tool with task_id="${task.id}" to check progress:
+ - block=false (default): Check status immediately - returns full status info
+-- block=true: Wait for completion (rarely needed since system notifies)`
++- block=true: Wait for completion (recommended when waiting for agent results)`
+ 	} catch (error) {
+ 		const message = error instanceof Error ? error.message : String(error)
+ 		return `Failed to launch background agent task: ${message}`
+diff -ruN a/src/tools/call-omo-agent/background-executor.ts b/src/tools/call-omo-agent/background-executor.ts
+--- a/src/tools/call-omo-agent/background-executor.ts	2026-03-28 12:29:15.941191982 +0900
++++ b/src/tools/call-omo-agent/background-executor.ts	2026-03-28 12:29:15.944750118 +0900
+@@ -85,7 +85,7 @@
+ The system will notify you when the task completes.
+ Use \`background_output\` tool with task_id="${task.id}" to check progress:
+ - block=false (default): Check status immediately - returns full status info
+-- block=true: Wait for completion (rarely needed since system notifies)`
++- block=true: Wait for completion (recommended when waiting for agent results)`
+   } catch (error) {
+     const message = error instanceof Error ? error.message : String(error)
+     return `Failed to launch background agent task: ${message}`
