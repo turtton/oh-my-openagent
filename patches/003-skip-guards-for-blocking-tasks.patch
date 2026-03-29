@@ -36,10 +36,9 @@
    validateSessionHasOutput(sessionID)
      .then(async (hasValidOutput) => {
        if (task.status !== "running") {
-
 --- a/src/features/background-agent/manager.ts	2026-03-29 15:00:00.000000000 +0900
 +++ b/src/features/background-agent/manager.ts	2026-03-29 15:00:00.000000000 +0900
-@@ -199,8 +199,12 @@
+@@ -200,8 +200,12 @@
      }
    }
  
@@ -53,7 +52,7 @@
    }
  
    async assertCanSpawn(parentSessionID: string): Promise<SubagentSpawnContext> {
-@@ -994,6 +998,7 @@
+@@ -1013,6 +1017,7 @@
          idleDeferralTimers: this.idleDeferralTimers,
          validateSessionHasOutput: (id) => this.validateSessionHasOutput(id),
          checkSessionTodos: (id) => this.checkSessionTodos(id),
@@ -61,10 +60,11 @@
          tryCompleteTask: (task, source) => this.tryCompleteTask(task, source),
          emitIdleEvent: (sessionID) => this.handleEvent({ type: "session.idle", properties: { sessionID } }),
        })
-@@ -1861,6 +1866,11 @@
+@@ -1893,6 +1898,12 @@
+         const completionSource = sessionStatus?.type === "idle"
            ? "polling (idle status)"
            : "polling (session gone from status)"
- 
++
 +        if (this.hasActiveBlockWaiter(task.id)) {
 +          await this.tryCompleteTask(task, `${completionSource} (blocking bypass)`)
 +          continue
