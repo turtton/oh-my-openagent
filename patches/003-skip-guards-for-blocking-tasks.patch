@@ -1,0 +1,75 @@
+--- a/src/features/background-agent/session-idle-event-handler.ts	2026-03-29 15:00:00.000000000 +0900
++++ b/src/features/background-agent/session-idle-event-handler.ts	2026-03-29 15:00:00.000000000 +0900
+@@ -13,6 +13,7 @@
+   idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>>
+   validateSessionHasOutput: (sessionID: string) => Promise<boolean>
+   checkSessionTodos: (sessionID: string) => Promise<boolean>
++  hasActiveBlockWaiter: (taskId: string) => boolean
+   tryCompleteTask: (task: BackgroundTask, source: string) => Promise<boolean>
+   emitIdleEvent: (sessionID: string) => void
+ }): void {
+@@ -22,6 +23,7 @@
+     idleDeferralTimers,
+     validateSessionHasOutput,
+     checkSessionTodos,
++    hasActiveBlockWaiter,
+     tryCompleteTask,
+     emitIdleEvent,
+   } = args
+@@ -55,6 +57,19 @@
+     return
+   }
+ 
++  const taskIsBlocking = hasActiveBlockWaiter(task.id)
++
++  if (taskIsBlocking) {
++    // Parent is actively waiting with block=true - skip output validation and todo checks,
++    // complete immediately so the blocking loop can return results.
++    log("[background-agent] Task is blocking, skipping guards for immediate completion:", task.id)
++    tryCompleteTask(task, "session.idle event (blocking bypass)")
++      .catch((err) => {
++        log("[background-agent] Error in blocking bypass completion:", err)
++      })
++    return
++  }
++
+   validateSessionHasOutput(sessionID)
+     .then(async (hasValidOutput) => {
+       if (task.status !== "running") {
+
+--- a/src/features/background-agent/manager.ts	2026-03-29 15:00:00.000000000 +0900
++++ b/src/features/background-agent/manager.ts	2026-03-29 15:00:00.000000000 +0900
+@@ -199,8 +199,12 @@
+     }
+   }
+ 
++  hasActiveBlockWaiter(taskId: string): boolean {
++    return (this.blockingTaskRefCounts.get(taskId) ?? 0) > 0
++  }
++
+   isTaskBlocking(taskId: string): boolean {
+-    return (this.blockingTaskRefCounts.get(taskId) ?? 0) > 0 || this.wasBlockedTasks.has(taskId)
++    return this.hasActiveBlockWaiter(taskId) || this.wasBlockedTasks.has(taskId)
+   }
+ 
+   async assertCanSpawn(parentSessionID: string): Promise<SubagentSpawnContext> {
+@@ -994,6 +998,7 @@
+         idleDeferralTimers: this.idleDeferralTimers,
+         validateSessionHasOutput: (id) => this.validateSessionHasOutput(id),
+         checkSessionTodos: (id) => this.checkSessionTodos(id),
++        hasActiveBlockWaiter: (taskId) => this.hasActiveBlockWaiter(taskId),
+         tryCompleteTask: (task, source) => this.tryCompleteTask(task, source),
+         emitIdleEvent: (sessionID) => this.handleEvent({ type: "session.idle", properties: { sessionID } }),
+       })
+@@ -1861,6 +1866,11 @@
+           ? "polling (idle status)"
+           : "polling (session gone from status)"
+ 
++        if (this.hasActiveBlockWaiter(task.id)) {
++          await this.tryCompleteTask(task, `${completionSource} (blocking bypass)`)
++          continue
++        }
++
+         const hasValidOutput = await this.validateSessionHasOutput(sessionID)
+         if (!hasValidOutput) {
+           log("[background-agent] Polling idle/gone but no valid output yet, waiting:", task.id)
