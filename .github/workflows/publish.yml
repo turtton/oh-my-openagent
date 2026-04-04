@@ -96,12 +96,13 @@ jobs:
       - uses: actions/setup-node@v4
         if: steps.check.outputs.skip != 'true'
         with:
-          node-version: '22'
+          # Pin to 22.22.1: Node 22.22.2 has broken npm (nodejs/node#62425)
+          node-version: '22.22.1'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Upgrade npm for Trusted Publishers OIDC
         if: steps.check.outputs.skip != 'true'
-        run: npm install -g npm@11
+        run: npm install -g npm@latest
 
       - name: Fetch upstream
         if: steps.check.outputs.skip != 'true'
