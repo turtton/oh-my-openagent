@@ -1,9 +1,9 @@
 diff -ruN a/src/agents/dynamic-agent-prompt-builder.ts b/src/agents/dynamic-agent-prompt-builder.ts
---- a/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 13:17:01.007009370 +0900
-+++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-03-28 13:17:01.011299653 +0900
-@@ -308,8 +308,8 @@
- 
- **Collect Oracle results before your final answer. No exceptions.**
+--- a/src/agents/dynamic-agent-prompt-builder.ts	2026-04-02 22:26:12.204171404 +0900
++++ b/src/agents/dynamic-agent-prompt-builder.ts	2026-04-02 22:31:53.677730219 +0900
+@@ -314,8 +314,8 @@
+ - While waiting, only do non-overlapping prep work. Never ship implementation decisions Oracle was asked to decide.
+ - Never "time out and continue anyway" for Oracle-dependent tasks.
  
 -- Oracle takes minutes. When done with your own work: **end your response** — wait for the \`<system-reminder>\`.
 -- Do NOT poll \`background_output\` on a running Oracle. The notification will come.
@@ -12,7 +12,7 @@ diff -ruN a/src/agents/dynamic-agent-prompt-builder.ts b/src/agents/dynamic-agen
  - Never cancel Oracle.
  </Oracle_Usage>`
  }
-@@ -336,7 +336,7 @@
+@@ -342,7 +342,7 @@
      "- **Testing**: Deleting failing tests to \"pass\"",
      "- **Search**: Firing agents for single-line typos or obvious syntax errors",
      "- **Debugging**: Shotgun debugging, random changes",
@@ -22,9 +22,9 @@ diff -ruN a/src/agents/dynamic-agent-prompt-builder.ts b/src/agents/dynamic-agen
      "- **Oracle**: Delivering answer without collecting Oracle results",
    ]
 diff -ruN a/src/agents/sisyphus.ts b/src/agents/sisyphus.ts
---- a/src/agents/sisyphus.ts	2026-03-28 13:17:01.300991445 +0900
-+++ b/src/agents/sisyphus.ts	2026-03-28 13:17:01.304758135 +0900
-@@ -236,8 +236,8 @@
+--- a/src/agents/sisyphus.ts	2026-04-02 22:26:12.204650973 +0900
++++ b/src/agents/sisyphus.ts	2026-04-02 22:29:48.430758054 +0900
+@@ -251,8 +251,8 @@
  2. Continue only with non-overlapping work
     - If you have DIFFERENT independent work \u2192 do it now
     - Otherwise \u2192 **END YOUR RESPONSE.**
@@ -36,10 +36,10 @@ diff -ruN a/src/agents/sisyphus.ts b/src/agents/sisyphus.ts
  
  ${buildAntiDuplicationSection()}
 diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-agent/manager.ts
---- a/src/features/background-agent/manager.ts	2026-03-28 13:17:01.661758114 +0900
-+++ b/src/features/background-agent/manager.ts	2026-03-28 13:17:01.666321729 +0900
-@@ -149,6 +149,8 @@
-   private completedTaskSummaries: Map<string, Array<{id: string, description: string}>> = new Map()
+--- a/src/features/background-agent/manager.ts	2026-04-02 22:26:12.207129535 +0900
++++ b/src/features/background-agent/manager.ts	2026-04-02 22:32:31.497706995 +0900
+@@ -154,6 +154,8 @@
+   private completedTaskSummaries: Map<string, Array<{id: string, description: string, status: string, error?: string}>> = new Map()
    private idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>> = new Map()
    private notificationQueueByParent: Map<string, Promise<void>> = new Map()
 +  private blockingTaskRefCounts: Map<string, number> = new Map()
@@ -47,7 +47,7 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
    private rootDescendantCounts: Map<string, number>
    private preStartDescendantReservations: Set<string>
    private enableParentSessionNotifications: boolean
-@@ -182,6 +184,25 @@
+@@ -187,6 +189,25 @@
      this.registerProcessCleanup()
    }
  
@@ -73,7 +73,7 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
    async assertCanSpawn(parentSessionID: string): Promise<SubagentSpawnContext> {
      const spawnContext = await resolveSubagentSpawnContext(this.client, parentSessionID)
      const maxDepth = getMaxSubagentDepth(this.config)
-@@ -1299,6 +1320,8 @@
+@@ -1327,6 +1348,8 @@
  
        this.clearNotificationsForTask(taskId)
        this.tasks.delete(taskId)
@@ -82,7 +82,7 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
        this.clearTaskHistoryWhenParentTasksGone(task.parentSessionID)
        if (task.sessionID) {
          subagentSessions.delete(task.sessionID)
-@@ -1516,13 +1539,17 @@
+@@ -1554,15 +1577,19 @@
        })
      }
  
@@ -97,25 +97,29 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
 +      this.completedTaskSummaries.get(task.parentSessionID)!.push({
 +        id: task.id,
 +        description: task.description,
++        status: task.status,
++        error: task.error,
 +      })
      }
 -    this.completedTaskSummaries.get(task.parentSessionID)!.push({
 -      id: task.id,
 -      description: task.description,
+-      status: task.status,
+-      error: task.error,
 -    })
  
      // Update pending tracking and check if all tasks complete
      const pendingSet = this.pendingByParent.get(task.parentSessionID)
-@@ -1543,7 +1570,7 @@
+@@ -1583,7 +1610,7 @@
      }
  
      const completedTasks = allComplete
--      ? (this.completedTaskSummaries.get(task.parentSessionID) ?? [{ id: task.id, description: task.description }])
+-      ? (this.completedTaskSummaries.get(task.parentSessionID) ?? [{ id: task.id, description: task.description, status: task.status, error: task.error }])
 +      ? (this.completedTaskSummaries.get(task.parentSessionID) ?? [])
        : []
  
      if (allComplete) {
-@@ -1559,8 +1586,8 @@
+@@ -1599,8 +1626,8 @@
            : "CANCELLED"
      const errorInfo = task.error ? `\n**Error:** ${task.error}` : ""
  
@@ -123,42 +127,34 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
 -    if (allComplete) {
 +    let notification: string | null = null
 +    if (allComplete && completedTasks.length > 0) {
-         const completedTasksText = completedTasks
-           .map(t => `- \`${t.id}\`: ${t.description}`)
-           .join("\n")
-@@ -1569,13 +1596,13 @@
- [ALL BACKGROUND TASKS COMPLETE]
+         const succeededTasks = completedTasks.filter(t => t.status === "completed")
+         const failedTasks = completedTasks.filter(t => t.status !== "completed")
  
- **Completed:**
--${completedTasksText || `- \`${task.id}\`: ${task.description}`}
-+${completedTasksText}
+@@ -1634,8 +1661,8 @@
  
- Use \`background_output(task_id="<id>")\` to retrieve each result.
+ Use \`background_output(task_id="<id>")\` to retrieve each result.${hasFailures ? `\n\n**ACTION REQUIRED:** ${failedTasks.length} task(s) failed. Check errors above and decide whether to retry or proceed.` : ""}
  </system-reminder>`
 -    } else {
--      // Individual completion - silent notification
 -      notification = `<system-reminder>
 +    } else if (!shouldSuppressNotification) {
-+      // Individual completion - silent notification (non-blocked tasks only)
 +      notification = !allComplete ? `<system-reminder>
  [BACKGROUND TASK ${statusText}]
  **ID:** \`${task.id}\`
  **Description:** ${task.description}
-@@ -1585,6 +1612,13 @@
- Do NOT poll - continue productive work.
+@@ -1645,6 +1672,12 @@
+ ${statusText === "COMPLETED" ? "Do NOT poll - continue productive work." : "**ACTION REQUIRED:** This task failed. Check the error and decide whether to retry, cancel remaining tasks, or continue."}
  
  Use \`background_output(task_id="${task.id}")\` to retrieve this result when ready.
 +</system-reminder>` : `<system-reminder>
 +[ALL BACKGROUND TASKS COMPLETE]
 +
-+**Completed:**
-+- \`${task.id}\`: ${task.description}
++- \`${task.id}\`: ${task.description} [${task.status.toUpperCase()}]${task.error ? ` - ${task.error}` : ""}
 +
 +Use \`background_output(task_id="<id>")\` to retrieve each result.
  </system-reminder>`
      }
  
-@@ -1592,7 +1626,7 @@
+@@ -1652,7 +1685,7 @@
        let model: { providerID: string; modelID: string } | undefined
        let tools: Record<string, boolean> | undefined = task.parentTools
  
@@ -167,7 +163,7 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
          try {
            const messagesResp = await this.client.session.messages({ path: { id: task.parentSessionID } })
            const messages = normalizeSDKResponse(messagesResp, [] as Array<{
-@@ -1672,13 +1706,21 @@
+@@ -1736,13 +1769,21 @@
              log("[background-agent] Failed to send notification:", error)
            }
          }
@@ -190,7 +186,7 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
      if (task.status !== "running" && task.status !== "pending") {
        this.scheduleTaskRemoval(task.id)
      }
-@@ -1915,6 +1957,8 @@
+@@ -2038,6 +2079,8 @@
      this.processingKeys.clear()
      this.taskHistory.clearAll()
      this.completedTaskSummaries.clear()
@@ -200,8 +196,8 @@ diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-a
      log("[background-agent] Shutdown complete")
  
 diff -ruN a/src/tools/background-task/clients.ts b/src/tools/background-task/clients.ts
---- a/src/tools/background-task/clients.ts	2026-03-28 13:17:01.975415903 +0900
-+++ b/src/tools/background-task/clients.ts	2026-03-28 13:17:01.978758095 +0900
+--- a/src/tools/background-task/clients.ts	2026-04-02 22:26:12.219681680 +0900
++++ b/src/tools/background-task/clients.ts	2026-04-02 22:29:48.431110053 +0900
 @@ -29,4 +29,4 @@
    }
  }
@@ -209,8 +205,8 @@ diff -ruN a/src/tools/background-task/clients.ts b/src/tools/background-task/cli
 -export type BackgroundOutputManager = Pick<BackgroundManager, "getTask">
 +export type BackgroundOutputManager = Pick<BackgroundManager, "getTask" | "registerBlockingTask" | "unregisterBlockingTask">
 diff -ruN a/src/tools/background-task/constants.ts b/src/tools/background-task/constants.ts
---- a/src/tools/background-task/constants.ts	2026-03-28 13:17:02.271439225 +0900
-+++ b/src/tools/background-task/constants.ts	2026-03-28 13:17:02.275087899 +0900
+--- a/src/tools/background-task/constants.ts	2026-04-02 22:26:12.219691710 +0900
++++ b/src/tools/background-task/constants.ts	2026-04-02 22:29:48.431146293 +0900
 @@ -2,6 +2,6 @@
  
  Use \`background_output\` to get results. Prompts MUST be in English.`
@@ -220,9 +216,9 @@ diff -ruN a/src/tools/background-task/constants.ts b/src/tools/background-task/c
  
  export const BACKGROUND_CANCEL_DESCRIPTION = `Cancel running background task(s). Use all=true to cancel ALL before final answer.`
 diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/background-task/create-background-output.ts
---- a/src/tools/background-task/create-background-output.ts	2026-03-28 13:17:02.600015239 +0900
-+++ b/src/tools/background-task/create-background-output.ts	2026-03-28 13:17:02.603599844 +0900
-@@ -37,10 +37,6 @@
+--- a/src/tools/background-task/create-background-output.ts	2026-04-02 22:26:12.219733650 +0900
++++ b/src/tools/background-task/create-background-output.ts	2026-04-02 22:29:48.431198793 +0900
+@@ -39,10 +39,6 @@
    return status === "pending" || status === "running"
  }
  
@@ -233,7 +229,7 @@ diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/ba
  export function createBackgroundOutput(manager: BackgroundOutputManager, client: BackgroundOutputClient): ToolDefinition {
    return tool({
      description: BACKGROUND_OUTPUT_DESCRIPTION,
-@@ -50,9 +46,9 @@
+@@ -52,9 +48,9 @@
          .boolean()
          .optional()
          .describe(
@@ -245,7 +241,7 @@ diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/ba
        full_session: tool.schema.boolean().optional().describe("Return full session messages with filters (default: false)"),
        include_thinking: tool.schema.boolean().optional().describe("Include thinking/reasoning parts in full_session output (default: false)"),
        message_limit: tool.schema.number().optional().describe("Max messages to return (capped at 100)"),
-@@ -86,38 +82,28 @@
+@@ -88,38 +84,28 @@
          }
  
          const shouldBlock = args.block === true
@@ -301,7 +297,7 @@ diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/ba
            }
          }
  
-@@ -135,7 +121,7 @@
+@@ -137,7 +123,7 @@
              thinkingMaxChars: args.thinking_max_chars,
            })
  
@@ -310,7 +306,7 @@ diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/ba
          }
  
          if (resolvedTask.status === "completed") {
-@@ -147,7 +133,7 @@
+@@ -150,7 +136,7 @@
          }
  
          const statusOutput = formatTaskStatus(resolvedTask)
@@ -320,9 +316,9 @@ diff -ruN a/src/tools/background-task/create-background-output.ts b/src/tools/ba
          return `Error getting output: ${error instanceof Error ? error.message : String(error)}`
        }
 diff -ruN a/src/tools/background-task/create-background-task.ts b/src/tools/background-task/create-background-task.ts
---- a/src/tools/background-task/create-background-task.ts	2026-03-28 13:17:02.932249639 +0900
-+++ b/src/tools/background-task/create-background-task.ts	2026-03-28 13:17:02.935962624 +0900
-@@ -115,7 +115,7 @@
+--- a/src/tools/background-task/create-background-task.ts	2026-04-02 22:26:12.219775539 +0900
++++ b/src/tools/background-task/create-background-task.ts	2026-04-02 22:29:48.431262712 +0900
+@@ -117,7 +117,7 @@
  The system will notify you when the task completes.
  Use \`background_output\` tool with task_id="${task.id}" to check progress:
  - block=false (default): Check status immediately - returns full status info
@@ -332,8 +328,8 @@ diff -ruN a/src/tools/background-task/create-background-task.ts b/src/tools/back
          const message = error instanceof Error ? error.message : String(error)
          return `[ERROR] Failed to launch background task: ${message}`
 diff -ruN a/src/tools/background-task/types.ts b/src/tools/background-task/types.ts
---- a/src/tools/background-task/types.ts	2026-03-28 13:17:03.259779964 +0900
-+++ b/src/tools/background-task/types.ts	2026-03-28 13:17:03.264181008 +0900
+--- a/src/tools/background-task/types.ts	2026-04-02 22:26:12.219909889 +0900
++++ b/src/tools/background-task/types.ts	2026-04-02 22:29:48.431311192 +0900
 @@ -47,7 +47,7 @@
    }
  }
@@ -344,9 +340,9 @@ diff -ruN a/src/tools/background-task/types.ts b/src/tools/background-task/types
  export type FullSessionMessagePart = {
    type?: string
 diff -ruN a/src/tools/call-omo-agent/background-agent-executor.ts b/src/tools/call-omo-agent/background-agent-executor.ts
---- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 13:17:03.578799511 +0900
-+++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-03-28 13:17:03.581757990 +0900
-@@ -81,7 +81,7 @@
+--- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-04-02 22:26:12.219958129 +0900
++++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-04-02 22:29:48.431353932 +0900
+@@ -84,7 +84,7 @@
  The system will notify you when the task completes.
  Use \`background_output\` tool with task_id="${task.id}" to check progress:
  - block=false (default): Check status immediately - returns full status info
@@ -356,9 +352,9 @@ diff -ruN a/src/tools/call-omo-agent/background-agent-executor.ts b/src/tools/ca
  		const message = error instanceof Error ? error.message : String(error)
  		return `Failed to launch background agent task: ${message}`
 diff -ruN a/src/tools/call-omo-agent/background-executor.ts b/src/tools/call-omo-agent/background-executor.ts
---- a/src/tools/call-omo-agent/background-executor.ts	2026-03-28 13:17:03.882949249 +0900
-+++ b/src/tools/call-omo-agent/background-executor.ts	2026-03-28 13:17:03.888322102 +0900
-@@ -85,7 +85,7 @@
+--- a/src/tools/call-omo-agent/background-executor.ts	2026-04-02 22:26:12.219978829 +0900
++++ b/src/tools/call-omo-agent/background-executor.ts	2026-04-02 22:29:48.431405042 +0900
+@@ -91,7 +91,7 @@
  The system will notify you when the task completes.
  Use \`background_output\` tool with task_id="${task.id}" to check progress:
  - block=false (default): Check status immediately - returns full status info
