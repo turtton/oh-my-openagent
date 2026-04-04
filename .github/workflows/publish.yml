@@ -7,6 +7,7 @@ on:
       - 'patches/**'
       - 'scripts/**'
       - 'package.json'
+      - '.github/workflows/**'
   schedule:
     - cron: '0 9 * * *'
   workflow_dispatch:
@@ -100,7 +101,7 @@ jobs:
 
       - name: Upgrade npm for Trusted Publishers OIDC
         if: steps.check.outputs.skip != 'true'
-        run: npm install -g npm@10
+        run: npm install -g npm@11
 
       - name: Fetch upstream
         if: steps.check.outputs.skip != 'true'
