@@ -38,7 +38,7 @@
        if (task.status !== "running") {
 --- a/src/features/background-agent/manager.ts	2026-04-02 22:36:05.887771085 +0900
 +++ b/src/features/background-agent/manager.ts	2026-04-02 22:35:49.218567749 +0900
-@@ -204,8 +204,12 @@
+@@ -211,8 +211,12 @@
      }
    }
  
@@ -51,7 +51,7 @@
 +    return this.hasActiveBlockWaiter(taskId) || this.wasBlockedTasks.has(taskId)
    }
  
-   async assertCanSpawn(parentSessionID: string): Promise<SubagentSpawnContext> {
+   private async abortSessionWithLogging(sessionID: string, reason: string): Promise<void> {
 @@ -1019,6 +1023,7 @@
          idleDeferralTimers: this.idleDeferralTimers,
          validateSessionHasOutput: (id) => this.validateSessionHasOutput(id),

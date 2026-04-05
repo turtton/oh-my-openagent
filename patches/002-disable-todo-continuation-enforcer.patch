@@ -1,9 +1,9 @@
 --- a/src/index.ts	2026-03-19 00:57:41.730795110 +0900
 +++ b/src/index.ts	2026-03-19 01:02:24.637099695 +0900
-@@ -29,7 +29,7 @@
-   await activePluginDispose?.()
- 
-   const pluginConfig = loadPluginConfig(ctx.directory, ctx)
+@@ -41,7 +41,7 @@
+   if (tmuxIntegrationEnabled) {
+     startTmuxCheck()
+   }
 -  const disabledHooks = new Set(pluginConfig.disabled_hooks ?? [])
 +  const disabledHooks = new Set(pluginConfig.disabled_hooks ?? ["todo-continuation-enforcer"])
  
