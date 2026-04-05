@@ -38,6 +38,34 @@ diff -ruN a/src/agents/sisyphus.ts b/src/agents/sisyphus.ts
  5. Cleanup: Cancel disposable tasks individually via \`background_cancel(taskId="...")\`
  
  ${buildAntiDuplicationSection()}
+diff -ruN a/src/agents/sisyphus/default.ts b/src/agents/sisyphus/default.ts
+--- a/src/agents/sisyphus/default.ts	2026-04-05 22:08:38.375302562 +0900
++++ b/src/agents/sisyphus/default.ts	2026-04-05 22:09:25.212870374 +0900
+@@ -331,8 +331,8 @@
+ 2. Continue only with non-overlapping work
+    - If you have DIFFERENT independent work → do it now
+    - Otherwise → **END YOUR RESPONSE.**
+-3. System sends \`<system-reminder>\` on completion → triggers your next turn
+-4. Collect via \`background_output(task_id="...")\`
++3. When waiting for results: call \`background_output(task_id="...", block=true)\` to actively wait until completion.
++4. Do NOT rely on system notifications to resume — use block=true to stay in the same turn.
+ 5. Cleanup: Cancel disposable tasks individually via \`background_cancel(taskId="...")\`
+ 
+ ${buildAntiDuplicationSection()}
+diff -ruN a/src/agents/sisyphus/gpt-5-4.ts b/src/agents/sisyphus/gpt-5-4.ts
+--- a/src/agents/sisyphus/gpt-5-4.ts	2026-04-05 22:08:38.374242117 +0900
++++ b/src/agents/sisyphus/gpt-5-4.ts	2026-04-05 22:08:45.172928596 +0900
+@@ -260,8 +260,8 @@
+ 2. Continue only with non-overlapping work
+    - If you have DIFFERENT independent work → do it now
+    - Otherwise → **END YOUR RESPONSE.**
+-3. System sends \`<system-reminder>\` on completion → triggers your next turn
+-4. Collect via \`background_output(task_id="...")\`
++3. When waiting for results: call \`background_output(task_id="...", block=true)\` to actively wait until completion.
++4. Do NOT rely on system notifications to resume — use block=true to stay in the same turn.
+ 5. Cancel disposable tasks individually via \`background_cancel(taskId="...")\`
+ 
+ ${buildAntiDuplicationSection()}
 diff -ruN a/src/features/background-agent/manager.ts b/src/features/background-agent/manager.ts
 --- a/src/features/background-agent/manager.ts	2026-04-05 20:46:09.754620301 +0900
 +++ b/src/features/background-agent/manager.ts	2026-04-05 20:48:05.561418415 +0900
@@ -330,6 +358,98 @@ diff -ruN a/src/tools/background-task/types.ts b/src/tools/background-task/types
  
  export type FullSessionMessagePart = {
    type?: string
+diff -ruN a/src/tools/background-task/create-background-output.blocking.test.ts b/src/tools/background-task/create-background-output.blocking.test.ts
+--- a/src/tools/background-task/create-background-output.blocking.test.ts	2026-04-05 22:11:31.043873978 +0900
++++ b/src/tools/background-task/create-background-output.blocking.test.ts	2026-04-05 22:11:53.462667816 +0900
+@@ -58,6 +58,8 @@
+ 
+         return task
+       },
++      registerBlockingTask: () => {},
++      unregisterBlockingTask: () => {},
+     }
+ 
+     const tool = createBackgroundOutput(manager, createMockClient())
+@@ -79,7 +81,7 @@
+     expect(output).not.toContain("Timed out waiting")
+   })
+ 
+-  test("returns legacy status output with timeout note when task stays running", async () => {
++  test("waits indefinitely until task completes when block=true (timeout ignored)", async () => {
+     // #given
+     let pollCount = 0
+     const task = createTask({ status: "running" })
+@@ -87,8 +89,13 @@
+       getTask: (id: string) => {
+         if (id !== task.id) return undefined
+         pollCount += 1
++        if (pollCount >= 3) {
++          task.status = "completed"
++        }
+         return task
+       },
++      registerBlockingTask: () => {},
++      unregisterBlockingTask: () => {},
+     }
+ 
+     const tool = createBackgroundOutput(manager, createMockClient())
+@@ -104,9 +111,7 @@
+     )
+ 
+     // #then
+-    expect(pollCount).toBeGreaterThanOrEqual(2)
+-    expect(output).toContain("# Task Status")
+-    expect(output).toContain("Timed out waiting")
+-    expect(output).toContain("still running")
++    expect(pollCount).toBeGreaterThanOrEqual(3)
++    expect(output).not.toContain("Timed out waiting")
+   })
+ })
+diff -ruN a/src/tools/background-task/create-background-output.metadata.test.ts b/src/tools/background-task/create-background-output.metadata.test.ts
+--- a/src/tools/background-task/create-background-output.metadata.test.ts	2026-04-05 22:11:31.045864759 +0900
++++ b/src/tools/background-task/create-background-output.metadata.test.ts	2026-04-05 22:12:22.832629796 +0900
+@@ -30,6 +30,8 @@
+     }
+     const manager: BackgroundOutputManager = {
+       getTask: id => (id === task.id ? task : undefined),
++      registerBlockingTask: () => {},
++      unregisterBlockingTask: () => {},
+     }
+     const client: BackgroundOutputClient = {
+       session: {
+diff -ruN a/src/tools/background-task/create-background-output.undo.test.ts b/src/tools/background-task/create-background-output.undo.test.ts
+--- a/src/tools/background-task/create-background-output.undo.test.ts	2026-04-05 22:11:31.044865104 +0900
++++ b/src/tools/background-task/create-background-output.undo.test.ts	2026-04-05 22:12:11.460644443 +0900
+@@ -91,6 +91,8 @@
+     const task = createTask()
+     const manager: BackgroundOutputManager = {
+       getTask: id => (id === task.id ? task : undefined),
++      registerBlockingTask: () => {},
++      unregisterBlockingTask: () => {},
+     }
+     const tool = createBackgroundOutput(manager, createMockClient())
+     const eventHandler = createMockEventHandler()
+diff -ruN a/src/tools/background-task/tools.test.ts b/src/tools/background-task/tools.test.ts
+--- a/src/tools/background-task/tools.test.ts	2026-04-05 22:11:31.046975235 +0900
++++ b/src/tools/background-task/tools.test.ts	2026-04-05 22:12:52.251592323 +0900
+@@ -23,6 +23,8 @@
+ function createMockManager(task: BackgroundTask): BackgroundOutputManager {
+   return {
+     getTask: (id: string) => (id === task.id ? task : undefined),
++    registerBlockingTask: () => {},
++    unregisterBlockingTask: () => {},
+   }
+ }
+ 
+@@ -355,6 +357,8 @@
+         }
+         return task
+       },
++      registerBlockingTask: () => {},
++      unregisterBlockingTask: () => {},
+     }
+     const client = createMockClient({
+       "ses-blocking-default": [
 diff -ruN a/src/tools/call-omo-agent/background-agent-executor.ts b/src/tools/call-omo-agent/background-agent-executor.ts
 --- a/src/tools/call-omo-agent/background-agent-executor.ts	2026-04-05 20:46:09.778371014 +0900
 +++ b/src/tools/call-omo-agent/background-agent-executor.ts	2026-04-05 20:49:37.992330990 +0900
