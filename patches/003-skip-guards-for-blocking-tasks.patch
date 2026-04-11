@@ -1,5 +1,5 @@
---- a/src/features/background-agent/session-idle-event-handler.ts	2026-04-02 22:36:05.870547015 +0900
-+++ b/src/features/background-agent/session-idle-event-handler.ts	2026-04-02 22:35:25.676806498 +0900
+--- a/src/features/background-agent/session-idle-event-handler.ts	2026-04-11 20:16:19.848722238 +0900
++++ b/src/features/background-agent/session-idle-event-handler.ts	2026-04-11 20:14:21.219821130 +0900
 @@ -13,6 +13,7 @@
    idleDeferralTimers: Map<string, ReturnType<typeof setTimeout>>
    validateSessionHasOutput: (sessionID: string) => Promise<boolean>
@@ -36,9 +36,9 @@
    validateSessionHasOutput(sessionID)
      .then(async (hasValidOutput) => {
        if (task.status !== "running") {
---- a/src/features/background-agent/manager.ts	2026-04-02 22:36:05.887771085 +0900
-+++ b/src/features/background-agent/manager.ts	2026-04-02 22:35:49.218567749 +0900
-@@ -211,8 +211,12 @@
+--- a/src/features/background-agent/manager.ts	2026-04-11 20:17:16.800962848 +0900
++++ b/src/features/background-agent/manager.ts	2026-04-11 20:14:21.220009819 +0900
+@@ -212,8 +212,12 @@
      }
    }
  
@@ -52,7 +52,7 @@
    }
  
    private async abortSessionWithLogging(sessionID: string, reason: string): Promise<void> {
-@@ -1019,6 +1023,7 @@
+@@ -1148,6 +1152,7 @@
          idleDeferralTimers: this.idleDeferralTimers,
          validateSessionHasOutput: (id) => this.validateSessionHasOutput(id),
          checkSessionTodos: (id) => this.checkSessionTodos(id),
@@ -60,11 +60,10 @@
          tryCompleteTask: (task, source) => this.tryCompleteTask(task, source),
          emitIdleEvent: (sessionID) => this.handleEvent({ type: "session.idle", properties: { sessionID } }),
        })
-@@ -1972,6 +1977,21 @@
-         const completionSource = sessionStatus?.type === "idle"
+@@ -2096,6 +2101,20 @@
            ? "polling (idle status)"
            : "polling (session gone from status)"
-+
+ 
 +        if (this.hasActiveBlockWaiter(task.id)) {
 +          // Still check for crashed sessions even when bypassing output/todo guards
 +          if (sessionGoneThresholdReached) {
