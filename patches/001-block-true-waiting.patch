@@ -500,3 +500,46 @@ diff -ruN --no-dereference a/src/tools/call-omo-agent/background-executor.ts b/s
    } catch (error) {
      const message = error instanceof Error ? error.message : String(error)
      return `Failed to launch background agent task: ${message}`
+diff -ruN --no-dereference a/src/features/background-agent/background-task-notification-template.ts b/src/features/background-agent/background-task-notification-template.ts
+--- a/src/features/background-agent/background-task-notification-template.ts	2026-04-12 00:00:00.000000000 +0900
++++ b/src/features/background-agent/background-task-notification-template.ts	2026-04-12 00:00:00.000000000 +0900
+@@ -66,9 +66,8 @@
+ **Description:** ${safeDescription(task)}
+ **Duration:** ${duration}${errorInfo}
+ 
+-**${remainingCount} task${remainingCount === 1 ? "" : "s"} still in progress.** You WILL be notified when ALL complete.
+-${isFailure ? "**ACTION REQUIRED:** This task failed. Check the error and decide whether to retry, cancel remaining tasks, or continue." : "Do NOT poll - continue productive work."}
+-
++**${remainingCount} task${remainingCount === 1 ? "" : "s"} still in progress.** Use \`background_output(task_id="...", block=true)\` to wait for remaining results.
++${isFailure ? "\n**ACTION REQUIRED:** This task failed. Check the error and decide whether to retry, cancel remaining tasks, or continue.\n" : ""}
+ Use \`background_output(task_id="${task.id}")\` to retrieve this result when ready.
+ </system-reminder>`
+ }
+diff -ruN --no-dereference a/src/tools/delegate-task/background-task.ts b/src/tools/delegate-task/background-task.ts
+--- a/src/tools/delegate-task/background-task.ts	2026-04-12 00:00:00.000000000 +0900
++++ b/src/tools/delegate-task/background-task.ts	2026-04-12 00:00:00.000000000 +0900
+@@ -151,9 +151,7 @@
+ Agent: ${task.agent}${args.category ? ` (category: ${args.category})` : ""}
+ Status: ${task.status}
+ 
+-System notifies on completion. Use \`background_output\` with task_id="${task.id}" to check.
+-
+-Do NOT call background_output now. Wait for <system-reminder> notification first.${taskMetadataBlock}`
++Use \`background_output\` with task_id="${task.id}" and block=true to wait for results.${taskMetadataBlock}`
+   } catch (error) {
+     return formatDetailedError(error, {
+       operation: "Launch background task",
+diff -ruN --no-dereference a/src/tools/delegate-task/background-continuation.ts b/src/tools/delegate-task/background-continuation.ts
+--- a/src/tools/delegate-task/background-continuation.ts	2026-04-12 00:00:00.000000000 +0900
++++ b/src/tools/delegate-task/background-continuation.ts	2026-04-12 00:00:00.000000000 +0900
+@@ -51,9 +51,7 @@
+ Status: ${task.status}
+ 
+ Agent continues with full previous context preserved.
+-System notifies on completion. Use \`background_output\` with task_id="${task.id}" to check.
+-
+-Do NOT call background_output now. Wait for <system-reminder> notification first.
++Use \`background_output\` with task_id="${task.id}" and block=true to wait for results.
+ 
+ <task_metadata>
+ session_id: ${task.sessionID}
